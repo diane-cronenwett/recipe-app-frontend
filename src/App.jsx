@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, ChefHat, Package, Calendar, Upload, Loader } from 'lucide-react';
+import { Trash2, Plus, ChefHat, Package, Calendar, Upload, Loader, Search, ArrowLeft } from 'lucide-react';
 
 export default function RecipeInventoryApp() {
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [mealPlan, setMealPlan] = useState([]);
   const [activeTab, setActiveTab] = useState('recipes');
-  const [newRecipe, setNewRecipe] = useState({ name: '', ingredients: [{ name: '', amount: '', unit: '' }] });
+  const [newRecipe, setNewRecipe] = useState({ name: '', ingredients: [{ name: '', amount: '', unit: '' }], instructions: '' });
   const [newItem, setNewItem] = useState({ name: '', amount: '', unit: '', expiresIn: '' });
   const [suggestedRecipes, setSuggestedRecipes] = useState([]);
   const [extracting, setExtracting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-  // Fetch all data on mount
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -37,23 +38,21 @@ export default function RecipeInventoryApp() {
     }
   };
 
-  // Add recipe
   const addRecipe = async () => {
     if (!newRecipe.name.trim()) return;
-
     const filtered = newRecipe.ingredients.filter(ing => ing.name.trim());
     
     try {
       const res = await fetch(`${API_BASE}/api/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newRecipe.name, ingredients: filtered })
+        body: JSON.stringify({ name: newRecipe.name, ingredients: filtered, instructions: newRecipe.instructions })
       });
 
       if (res.ok) {
         const recipe = await res.json();
         setRecipes([recipe, ...recipes]);
-        setNewRecipe({ name: '', ingredients: [{ name: '', amount: '', unit: '' }] });
+        setNewRecipe({ name: '', ingredients: [{ name: '', amount: '', unit: '' }], instructions: '' });
       }
     } catch (error) {
       alert('Failed to add recipe');
@@ -73,7 +72,6 @@ export default function RecipeInventoryApp() {
     setNewRecipe({ ...newRecipe, ingredients: updated });
   };
 
-  // Add inventory item
   const addInventoryItem = async () => {
     if (!newItem.name.trim()) return;
 
@@ -94,7 +92,6 @@ export default function RecipeInventoryApp() {
     }
   };
 
-  // Extract from recipe photo
   const handleRecipePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -110,7 +107,11 @@ export default function RecipeInventoryApp() {
       });
       const data = await res.json();
       if (data.recipe) {
-        setNewRecipe(data.recipe);
+        setNewRecipe({
+          name: data.recipe.name || '',
+          ingredients: data.recipe.ingredients || [{ name: '', amount: '', unit: '' }],
+          instructions: data.recipe.instructions || ''
+        });
       }
     } catch (err) {
       alert('Failed to extract recipe from photo');
@@ -119,7 +120,6 @@ export default function RecipeInventoryApp() {
     }
   };
 
-  // Extract from receipt photo
   const handleReceiptPhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -143,7 +143,7 @@ export default function RecipeInventoryApp() {
           });
           if (itemRes.ok) {
             const newInventoryItem = await itemRes.json();
-            setInventory([newInventoryItem, ...inventory]);
+            setInventory(prev => [newInventoryItem, ...prev]);
           }
         }
       }
@@ -154,7 +154,6 @@ export default function RecipeInventoryApp() {
     }
   };
 
-  // Find matching recipes
   const findMatchingRecipes = () => {
     const inventoryNames = inventory.map(i => i.name.toLowerCase());
     const matches = recipes.map(recipe => {
@@ -172,27 +171,29 @@ export default function RecipeInventoryApp() {
     setSuggestedRecipes(matches);
   };
 
-  // Remove recipe
   const removeRecipe = async (id) => {
     try {
-      await fetch(`${API_BASE}/api/recipes/${id}`, { method: 'DELETE' });
-      setRecipes(recipes.filter(r => r.id !== id));
+      const res = await fetch(`${API_BASE}/api/recipes/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setRecipes(recipes.filter(r => r.id !== id));
+        if (selectedRecipe?.id === id) setSelectedRecipe(null);
+      }
     } catch (error) {
       alert('Failed to delete recipe');
     }
   };
 
-  // Remove inventory item
   const removeInventoryItem = async (id) => {
     try {
-      await fetch(`${API_BASE}/api/inventory/${id}`, { method: 'DELETE' });
-      setInventory(inventory.filter(i => i.id !== id));
+      const res = await fetch(`${API_BASE}/api/inventory/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setInventory(inventory.filter(i => i.id !== id));
+      }
     } catch (error) {
       alert('Failed to delete item');
     }
   };
 
-  // Add to meal plan
   const addToMealPlan = async (recipe, day = 'Today') => {
     try {
       const res = await fetch(`${API_BASE}/api/meal-plan`, {
@@ -210,15 +211,21 @@ export default function RecipeInventoryApp() {
     }
   };
 
-  // Remove from meal plan
   const removeFromMealPlan = async (id) => {
     try {
-      await fetch(`${API_BASE}/api/meal-plan/${id}`, { method: 'DELETE' });
-      setMealPlan(mealPlan.filter(m => m.id !== id));
+      const res = await fetch(`${API_BASE}/api/meal-plan/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMealPlan(mealPlan.filter(m => m.id !== id));
+      }
     } catch (error) {
       alert('Failed to remove from meal plan');
     }
   };
+
+  const filteredRecipes = recipes.filter(r => 
+    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    r.ingredients.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   if (loading) {
     return (
@@ -231,10 +238,55 @@ export default function RecipeInventoryApp() {
     );
   }
 
+  // Recipe Detail View
+  if (selectedRecipe) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
+        <div className="max-w-4xl mx-auto p-6">
+          <button
+            onClick={() => setSelectedRecipe(null)}
+            className="flex items-center gap-2 text-orange-600 hover:text-orange-700 mb-6 font-medium"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back to Recipes
+          </button>
+
+          <div className="bg-white rounded-lg shadow-sm p-8 border border-gray-100">
+            <div className="flex justify-between items-start mb-6">
+              <h1 className="text-3xl font-bold text-gray-800">{selectedRecipe.name}</h1>
+              <button
+                onClick={() => removeRecipe(selectedRecipe.id)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-gray-800 mb-3">Ingredients</h2>
+              <ul className="space-y-2">
+                {selectedRecipe.ingredients.map((ing, idx) => (
+                  <li key={idx} className="text-gray-700">
+                    {ing.amount} {ing.unit} {ing.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {selectedRecipe.instructions && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800 mb-3">Instructions</h2>
+                <div className="text-gray-700 whitespace-pre-wrap">{selectedRecipe.instructions}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
       <div className="max-w-6xl mx-auto p-6">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <ChefHat className="w-8 h-8 text-orange-600" />
@@ -243,7 +295,6 @@ export default function RecipeInventoryApp() {
           <p className="text-gray-600">Manage recipes, track inventory, plan meals</p>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2 mb-8 border-b border-gray-200">
           {[
             { id: 'recipes', label: 'Recipes', icon: ChefHat },
@@ -265,7 +316,6 @@ export default function RecipeInventoryApp() {
           ))}
         </div>
 
-        {/* Recipes Tab */}
         {activeTab === 'recipes' && (
           <div className="space-y-8">
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
@@ -292,14 +342,14 @@ export default function RecipeInventoryApp() {
                         className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                       />
                       <input
-                        type="number"
+                        type="text"
                         placeholder="Amount"
                         value={ing.amount}
                         onChange={(e) => updateRecipeIngredient(idx, 'amount', e.target.value)}
                         className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                       />
                       <select
-                        value={ing.unit}
+                        value={ing.unit || ''}
                         onChange={(e) => updateRecipeIngredient(idx, 'unit', e.target.value)}
                         className="w-24 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                       >
@@ -320,6 +370,17 @@ export default function RecipeInventoryApp() {
                   </button>
                 </div>
 
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2">Instructions</h3>
+                  <textarea
+                    placeholder="Step-by-step instructions..."
+                    value={newRecipe.instructions}
+                    onChange={(e) => setNewRecipe({ ...newRecipe, instructions: e.target.value })}
+                    rows={6}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
                 <div className="pt-4 flex gap-3">
                   <button
                     onClick={addRecipe}
@@ -338,16 +399,37 @@ export default function RecipeInventoryApp() {
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-2xl font-bold text-gray-800">Saved Recipes ({recipes.length})</h2>
-              {recipes.length === 0 ? (
-                <p className="text-gray-600">No recipes yet. Add one above.</p>
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800">Saved Recipes ({recipes.length})</h2>
+              </div>
+
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search recipes or ingredients..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              {filteredRecipes.length === 0 ? (
+                <p className="text-gray-600">{recipes.length === 0 ? 'No recipes yet. Add one above.' : 'No recipes match your search.'}</p>
               ) : (
-                recipes.map(recipe => (
-                  <div key={recipe.id} className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+                filteredRecipes.map(recipe => (
+                  <div
+                    key={recipe.id}
+                    onClick={() => setSelectedRecipe(recipe)}
+                    className="bg-white rounded-lg shadow-sm p-4 border border-gray-100 cursor-pointer hover:shadow-md hover:border-orange-200 transition"
+                  >
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="text-lg font-semibold text-gray-800">{recipe.name}</h3>
                       <button
-                        onClick={() => removeRecipe(recipe.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeRecipe(recipe.id);
+                        }}
                         className="text-red-500 hover:text-red-700"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -370,7 +452,6 @@ export default function RecipeInventoryApp() {
           </div>
         )}
 
-        {/* Inventory Tab */}
         {activeTab === 'inventory' && (
           <div className="space-y-8">
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
@@ -387,7 +468,7 @@ export default function RecipeInventoryApp() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <input
-                    type="number"
+                    type="text"
                     placeholder="Amount"
                     value={newItem.amount}
                     onChange={(e) => setNewItem({ ...newItem, amount: e.target.value })}
@@ -469,7 +550,7 @@ export default function RecipeInventoryApp() {
                 {suggestedRecipes.map(match => (
                   <div key={match.recipe.id} className="bg-white rounded-lg shadow-sm p-4 border border-orange-200 bg-orange-50">
                     <div className="flex justify-between items-start">
-                      <div className="flex-1">
+                      <div className="flex-1 cursor-pointer" onClick={() => setSelectedRecipe(match.recipe)}>
                         <h3 className="font-semibold text-gray-800">{match.recipe.name}</h3>
                         <p className="text-sm text-gray-600 mt-1">
                           {match.matchCount} of {match.totalIngredients} ingredients available ({match.percentage}%)
@@ -489,7 +570,6 @@ export default function RecipeInventoryApp() {
           </div>
         )}
 
-        {/* Meal Plan Tab */}
         {activeTab === 'planner' && (
           <div className="space-y-8">
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">

@@ -359,6 +359,11 @@ export default function RecipeInventoryApp() {
                         <option value="cup">cup</option>
                         <option value="tsp">tsp</option>
                         <option value="tbsp">tbsp</option>
+                        <option value="fl oz">fl oz</option>
+                        <option value="quart">quart</option>
+                        <option value="gallon">gallon</option>
+                        <option value="lb">lb</option>
+                        <option value="can">can</option>
                       </select>
                     </div>
                   ))}
@@ -485,6 +490,11 @@ export default function RecipeInventoryApp() {
                     <option value="cup">cup</option>
                     <option value="tsp">tsp</option>
                     <option value="tbsp">tbsp</option>
+                    <option value="fl oz">fl oz</option>
+                    <option value="quart">quart</option>
+                    <option value="gallon">gallon</option>
+                    <option value="lb">lb</option>
+                    <option value="can">can</option>
                   </select>
                   <input
                     type="number"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Plus, ChefHat, Package, Calendar, Upload, Loader, Search, ArrowLeft } from 'lucide-react';
+import { Trash2, Plus, ChefHat, Package, Calendar, Upload, Loader, Search, ArrowLeft, Pencil, Save, X } from 'lucide-react';
 
 export default function RecipeInventoryApp() {
   const [recipes, setRecipes] = useState([]);
@@ -13,6 +13,8 @@ export default function RecipeInventoryApp() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editRecipe, setEditRecipe] = useState(null);
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
@@ -222,6 +224,71 @@ export default function RecipeInventoryApp() {
     }
   };
 
+  const startEdit = () => {
+    setEditRecipe({
+      name: selectedRecipe.name,
+      ingredients: selectedRecipe.ingredients.length > 0
+        ? selectedRecipe.ingredients.map(i => ({ ...i }))
+        : [{ name: '', amount: '', unit: '' }],
+      instructions: selectedRecipe.instructions || ''
+    });
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditRecipe(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editRecipe.name.trim()) return;
+    const filtered = editRecipe.ingredients.filter(ing => ing.name.trim());
+
+    try {
+      const res = await fetch(`${API_BASE}/api/recipes/${selectedRecipe.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editRecipe.name,
+          ingredients: filtered,
+          instructions: editRecipe.instructions
+        })
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setRecipes(recipes.map(r => r.id === updated.id ? updated : r));
+        setSelectedRecipe(updated);
+        setEditMode(false);
+        setEditRecipe(null);
+      } else {
+        alert('Failed to save changes');
+      }
+    } catch (error) {
+      alert('Failed to save changes');
+    }
+  };
+
+  const updateEditIngredient = (index, field, value) => {
+    const updated = [...editRecipe.ingredients];
+    updated[index] = { ...updated[index], [field]: value };
+    setEditRecipe({ ...editRecipe, ingredients: updated });
+  };
+
+  const addEditIngredientRow = () => {
+    setEditRecipe({
+      ...editRecipe,
+      ingredients: [...editRecipe.ingredients, { name: '', amount: '', unit: '' }]
+    });
+  };
+
+  const removeEditIngredient = (index) => {
+    setEditRecipe({
+      ...editRecipe,
+      ingredients: editRecipe.ingredients.filter((_, i) => i !== index)
+    });
+  };
+
   const filteredRecipes = recipes.filter(r => 
     r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.ingredients.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -244,39 +311,141 @@ export default function RecipeInventoryApp() {
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
         <div className="max-w-4xl mx-auto p-6">
           <button
-            onClick={() => setSelectedRecipe(null)}
+            onClick={() => { setSelectedRecipe(null); cancelEdit(); }}
             className="flex items-center gap-2 text-orange-600 hover:text-orange-700 mb-6 font-medium"
           >
             <ArrowLeft className="w-5 h-5" /> Back to Recipes
           </button>
 
           <div className="bg-white rounded-lg shadow-sm p-8 border border-gray-100">
-            <div className="flex justify-between items-start mb-6">
-              <h1 className="text-3xl font-bold text-gray-800">{selectedRecipe.name}</h1>
-              <button
-                onClick={() => removeRecipe(selectedRecipe.id)}
-                className="text-red-500 hover:text-red-700"
-              >
-                <Trash2 className="w-6 h-6" />
-              </button>
-            </div>
+            {!editMode ? (
+              <>
+                <div className="flex justify-between items-start mb-6">
+                  <h1 className="text-3xl font-bold text-gray-800">{selectedRecipe.name}</h1>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={startEdit}
+                      className="text-orange-600 hover:text-orange-700"
+                      title="Edit recipe"
+                    >
+                      <Pencil className="w-6 h-6" />
+                    </button>
+                    <button
+                      onClick={() => removeRecipe(selectedRecipe.id)}
+                      className="text-red-500 hover:text-red-700"
+                      title="Delete recipe"
+                    >
+                      <Trash2 className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
 
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-3">Ingredients</h2>
-              <ul className="space-y-2">
-                {selectedRecipe.ingredients.map((ing, idx) => (
-                  <li key={idx} className="text-gray-700">
-                    {ing.amount} {ing.unit} {ing.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-3">Ingredients</h2>
+                  <ul className="space-y-2">
+                    {selectedRecipe.ingredients.map((ing, idx) => (
+                      <li key={idx} className="text-gray-700">
+                        {ing.amount} {ing.unit} {ing.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-            {selectedRecipe.instructions && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-800 mb-3">Instructions</h2>
-                <div className="text-gray-700 whitespace-pre-wrap">{selectedRecipe.instructions}</div>
-              </div>
+                {selectedRecipe.instructions && (
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-3">Instructions</h2>
+                    <div className="text-gray-700 whitespace-pre-wrap">{selectedRecipe.instructions}</div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-start mb-6">
+                  <input
+                    type="text"
+                    value={editRecipe.name}
+                    onChange={(e) => setEditRecipe({ ...editRecipe, name: e.target.value })}
+                    className="text-2xl font-bold text-gray-800 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 flex-1 mr-4"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      onClick={saveEdit}
+                      className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 font-medium flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" /> Save
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2"
+                    >
+                      <X className="w-4 h-4" /> Cancel
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-3">Ingredients</h2>
+                  <div className="space-y-3">
+                    {editRecipe.ingredients.map((ing, idx) => (
+                      <div key={idx} className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder="Ingredient name"
+                          value={ing.name}
+                          onChange={(e) => updateEditIngredient(idx, 'name', e.target.value)}
+                          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Amount"
+                          value={ing.amount || ''}
+                          onChange={(e) => updateEditIngredient(idx, 'amount', e.target.value)}
+                          className="w-20 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                        <select
+                          value={ing.unit || ''}
+                          onChange={(e) => updateEditIngredient(idx, 'unit', e.target.value)}
+                          className="w-24 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Unit</option>
+                          <option value="g">g</option>
+                          <option value="ml">ml</option>
+                          <option value="cup">cup</option>
+                          <option value="tsp">tsp</option>
+                          <option value="tbsp">tbsp</option>
+                          <option value="fl oz">fl oz</option>
+                          <option value="quart">quart</option>
+                          <option value="gallon">gallon</option>
+                          <option value="lb">lb</option>
+                          <option value="can">can</option>
+                        </select>
+                        <button
+                          onClick={() => removeEditIngredient(idx)}
+                          className="text-red-500 hover:text-red-700 px-2"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={addEditIngredientRow}
+                      className="text-orange-600 hover:text-orange-700 font-medium text-sm flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" /> Add ingredient
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800 mb-3">Instructions</h2>
+                  <textarea
+                    value={editRecipe.instructions}
+                    onChange={(e) => setEditRecipe({ ...editRecipe, instructions: e.target.value })}
+                    rows={8}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>
